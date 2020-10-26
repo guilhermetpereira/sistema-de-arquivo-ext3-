@@ -8,8 +8,8 @@
 #include "sha256.h"
 using namespace std;
 
-const INODE INIT_ROOT = {  .IS_USED = 0x02,
-				.IS_DIR = 0x02,
+const INODE INIT_ROOT = {  .IS_USED = 0x01,
+				.IS_DIR = 0x01,
 				.NAME = {'/', 0, 0, 0,0, 0, 0,0, 0, 0},
 				.SIZE = 0,
 				.DIRECT_BLOCKS = {0,0,0},
