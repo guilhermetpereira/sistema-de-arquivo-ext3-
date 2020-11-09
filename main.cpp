@@ -190,6 +190,7 @@ int main(int argc, char const *argv[])
 			return -3;
 		/* save inode position for file */
 		long file_inode_pos = file.tellp() - (long)sizeof(INODE);
+		/* select block to add file into */
 		uint8_t parent_dir_block;
 		if(parent_dir->SIZE % T == 0 && parent_dir->SIZE > 0)
 		{
@@ -209,7 +210,7 @@ int main(int argc, char const *argv[])
 		}
 		else
 			parent_dir_block = parent_dir->DIRECT_BLOCKS[parent_dir->SIZE/3];
-
+		/* sabe changes to block */
 		file.seekp((parent_dir_block-N)*T + 1,ios_base::end);
 		for (int i = 0; i < T; ++i)
 		{
@@ -224,13 +225,27 @@ int main(int argc, char const *argv[])
 			file.seekp(-2, ios_base::cur);
 		}
 
+		/* incresaes directorie size */ 
 		parent_dir->SIZE++;
-		
-		
 		file.seekp(parent_dir_pos);
 		file.write((char*)parent_dir, sizeof(INODE));
 
-		/* search for avaible inode */ 
+		/* load inode for file into system */
+		INODE *file_inode = new INODE();
+		*file_inode = INIT_ROOT;
+		file_inode->IS_DIR = 0;
+
+		for (int i = 0; i < 10; ++i)
+		 	file_inode->NAME[i]  = ( i < file_path.rbegin()[0].size()) ? file_inode->NAME[i] = file_path.rbegin()[0][i] : 0; 
+		
+		file_inode->SIZE = blocks_needed;
+		for (int i = 0; i < blocks_needed; ++i)
+			file_inode->DIRECT_BLOCKS[i] = avaible_blocks_file[i];
+
+		file.seekp(file_inode_pos);
+		file.write((char*)file_inode, sizeof(INODE));
+
+
 
 
 		/* to do
