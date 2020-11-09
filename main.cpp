@@ -1,10 +1,10 @@
 #include <iostream>
 #include <sstream>
-#include <iostream>
 #include <fstream>
-#include <stdint.h>
 #include <math.h>
 #include <vector>
+#include <stdint.h>
+#include <cstring>
 #include "inode.h"
 #include "sha256.h"
 using namespace std;
@@ -52,6 +52,7 @@ vector<string> split(const string& str, const string& delim)
     while (pos < str.length() && prev < str.length());
     return tokens;
 }
+
 
 int main(int argc, char const *argv[])
 {
@@ -121,7 +122,7 @@ int main(int argc, char const *argv[])
 		/* Read and load into variavles number and size of blocks, and number of inodes */
 		uint8_t* buffer = new uint8_t[3];
 		fstream file;
-		file.open(file_sys.c_str(), std::fstream::binary | std::fstream::in);
+		file.open(file_sys.c_str(), std::fstream::binary | std::fstream::in | std::fstream::out);
 		file.read((char*)buffer, 3);
 
 		int T, N, I;
@@ -141,6 +142,37 @@ int main(int argc, char const *argv[])
 			cout << "No space for this file on blocks!" << endl;
 			return -1;
 		}
+		/* att bitmap but doesnt write to file system yet, necessary to check if directorie will have space for the new file*/ 
+		for (int i = 0; i < bit_map_size; ++i)
+			for (int j = 0; j < blocks_needed; ++j)
+				bit_map[i] |= 1 << avaible_blocks[j];
+
+		INODE *parent_dir = NULL;
+		string compare;
+		int counter = I;
+		do
+		{
+			buffer = new uint8_t(sizeof(INODE));
+			file.read((char*)buffer, sizeof(INODE));
+			parent_dir = (INODE*)buffer;
+			compare = (parent_dir->IS_USED && parent_dir->IS_DIR) ? parent_dir->NAME : "";
+			counter--;
+			delete[] buffer;
+		}while(counter > 0 && strcmp(compare.c_str(), dir.c_str()));
+
+		if(counter <= 0 )
+		{
+			cout << "Couldn't find parent dir" << endl;
+			return -2;
+		}
+
+		long parent_dir_pos = file.tellp() - sizeof(INODE);
+
+
+
+
+
+		/* search for avaible inode */ 
 
 
 		/* to do
