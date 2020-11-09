@@ -96,7 +96,7 @@ int main(int argc, char const *argv[])
 		for (int i = 0; i < num_inodes; i++)
 			file_write.write((char*)&vec_inodes[i], sizeof(INODE));
 
-		file_write << (uint8_t)0; // root INODE id
+		file_write << (uint8_t)1; // root INODE id
 		/* write N empty blocks */
 		for (int i = size_block*num_blocks - 1; i >= 0; i--)
 		file_write << (uint8_t)0; 		
@@ -136,20 +136,24 @@ int main(int argc, char const *argv[])
 		file.read((char*)bit_map, bit_map_size);
 
 		int blocks_needed = ceil((float)content.size()/2);
-		uint8_t *avaible_blocks = find_avaible_blocks(bit_map, bit_map_size, blocks_needed);
-		if(avaible_blocks[blocks_needed-1] == 0)
+
+		/*
+		 * ESTA PORTE DO CÓDIGO PODE SER REFATORADA !! 
+		 */
+		uint8_t *avaible_blocks_file = find_avaible_blocks(bit_map, bit_map_size, blocks_needed);
+		if(avaible_blocks_file[blocks_needed-1] == 0)
 		{
 			cout << "No space for this file on blocks!" << endl;
 			return -1;
 		}
 		/* att bitmap but doesnt write to file system yet, necessary to check if directorie will have space for the new file*/ 
-		for (int i = 0; i < bit_map_size; ++i)
-			for (int j = 0; j < blocks_needed; ++j)
-				bit_map[i] |= 1 << avaible_blocks[j];
-
+		for (int j = 0; j < blocks_needed; ++j)
+			bit_map[(int)avaible_blocks_file[j]/8] |= 1 << avaible_blocks_file[j];
+		/* REFATORAÇÃO ACABARIA QUI */
 		INODE *parent_dir = NULL;
 		string compare;
 		int counter = I;
+		/* search for parent dir */
 		do
 		{
 			buffer = new uint8_t(sizeof(INODE));
@@ -157,7 +161,6 @@ int main(int argc, char const *argv[])
 			parent_dir = (INODE*)buffer;
 			compare = (parent_dir->IS_USED && parent_dir->IS_DIR) ? parent_dir->NAME : "";
 			counter--;
-			delete[] buffer;
 		}while(counter > 0 && strcmp(compare.c_str(), dir.c_str()));
 
 		if(counter <= 0 )
@@ -166,11 +169,66 @@ int main(int argc, char const *argv[])
 			return -2;
 		}
 
-		long parent_dir_pos = file.tellp() - sizeof(INODE);
+		/* save inode position for parent dir */
+		long parent_dir_pos = file.tellp() - (long)sizeof(INODE);
+		
+		/* search for file inode */ 
+		file.seekp(3 + bit_map_size);
+		int file_inode_index = -1;
+		for (int i = 0; i < I; ++i)
+		{
+			buffer = new uint8_t(sizeof(INODE));
+			file.read((char*)buffer, sizeof(INODE));
+			if(!buffer[0])
+			{
+				file_inode_index = i;
+				break;
+			}
+			delete[] buffer;
+		}
+		if(file_inode_index == -1)
+			return -3;
+		/* save inode position for file */
+		long file_inode_pos = file.tellp() - (long)sizeof(INODE);
+		uint8_t parent_dir_block;
+		if(parent_dir->SIZE % T == 0 && parent_dir->SIZE > 0)
+		{
+			/*
+			 * ESTA PORTE DO CÓDIGO PODE SER REFATORADA !! 
+			 */
+			uint8_t *avaible_blocks_dir = find_avaible_blocks(bit_map, bit_map_size, 1);
+			if(avaible_blocks_file[0] == 0)
+			{
+				cout << "No space for this file on blocks!" << endl;
+				return -1;
+			}
+			/* att bitmap but doesnt write to file system yet, necessary to check if directorie will have space for the new file*/ 
+			bit_map[(int)avaible_blocks_file[0]/8] |= 1 << avaible_blocks_file[0];
+			parent_dir_block = avaible_blocks_dir[0];
+			/* REFATORAÇÃO ACABARIA QUI */
+		}
+		else
+			parent_dir_block = parent_dir->DIRECT_BLOCKS[parent_dir->SIZE/3];
 
+		file.seekp((parent_dir_block-N)*T + 1,ios_base::end);
+		for (int i = 0; i < T; ++i)
+		{
+			buffer = new uint8_t();
+			file.read((char*)buffer,1);
+			if(*buffer == 0)
+			{
+				file.seekp(-1, ios_base::cur);
+				file << (uint8_t)file_inode_index;
+				break;
+			}
+			file.seekp(-2, ios_base::cur);
+		}
 
-
-
+		parent_dir->SIZE++;
+		
+		
+		file.seekp(parent_dir_pos);
+		file.write((char*)parent_dir, sizeof(INODE));
 
 		/* search for avaible inode */ 
 
