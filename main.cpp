@@ -18,18 +18,19 @@ const INODE INIT_ROOT = {  .IS_USED = 0x01,
 				.DOUBLE_INDIRECT_BLOCKS = {0,0,0}};
 
 /* function to return index of avaible blocks */
-uint8_t* find_avaible_blocks(uint8_t* bit_map_array, uint8_t size,uint8_t num_blocks_wanted)
+uint8_t* find_avaible_blocks(uint8_t* bit_map_array, int size,int num_blocks_wanted)
 {
 	uint8_t *return_arr = new uint8_t[num_blocks_wanted]();
 	int pos = 0;
+	int i,j;
 	/* iteration trought bytes */
-	for (int i = 0; i < size; ++i)
+	for (i = 0; i < size; ++i)
 		/* iteration trought bits */
-		for (int j = 0; j < 7 && pos <= size; ++j)
+		for (j = 0; j < 9 && pos <= num_blocks_wanted; ++j)
 			/* check if bit is 0 */
 			if(!(bit_map_array[i] & (1 << j)))
 				return_arr[pos++] = j + i*8; // if it is, store index in return array
-				
+
 	return return_arr;
 }
 
@@ -109,27 +110,45 @@ int main(int argc, char const *argv[])
 	}	
 	else if(!command.compare("add"))
 	{
-		uint8_t T, N, I;
-		uint8_t* buffer = new uint8_t[3];
-	
-		fstream file;
-		file.open(file_sys.c_str(), std::fstream::binary);
-		file.read((char*)buffer, 3);
-
-		file.close();
-
-
-
 		string parse, content;
 		ss >> parse >> content;
+		/* divides file path into directiores and file */
 		vector<string> file_path = split(parse.c_str(), "/");
-		string dir = (file_path.size() > 1) ? file_path.back() : "/";
+		/*loads parent directiorie name or root */
+		string dir = (file_path.size() > 1) ? file_path.rbegin()[1]  : "/";
+
+
+		/* Read and load into variavles number and size of blocks, and number of inodes */
+		uint8_t* buffer = new uint8_t[3];
+		fstream file;
+		file.open(file_sys.c_str(), std::fstream::binary | std::fstream::in);
+		file.read((char*)buffer, 3);
+
+		int T, N, I;
+		T = buffer[0];
+		N = buffer[1];
+		I = buffer[2];
+		delete[] buffer;
+
+		int bit_map_size = ceil((float)N/8);
+		uint8_t *bit_map = new uint8_t(bit_map_size);	
+		file.read((char*)bit_map, bit_map_size);
+
+		int blocks_needed = ceil((float)content.size()/2);
+		uint8_t *avaible_blocks = find_avaible_blocks(bit_map, bit_map_size, blocks_needed);
+		if(avaible_blocks[blocks_needed-1] == 0)
+		{
+			cout << "No space for this file on blocks!" << endl;
+			return -1;
+		}
+
 
 		/* to do
 		 * checar se existe espaço para mais um bloco
 		 * processar o path para determinar se é arquivo no root ou outro diretório
 		 * adicionar inode 
 		 */
+		file.close();
 	}
 
 	
