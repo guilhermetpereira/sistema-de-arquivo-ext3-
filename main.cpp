@@ -65,7 +65,7 @@ int main(int argc, char const *argv[])
 	ss.str(command_line);
 
 	ss >> command >> file_sys;
-    // command.erase(0,1);
+    command.erase(0,1);
 	/* init file system */
 	if(!command.compare("init"))
 	{
@@ -96,7 +96,7 @@ int main(int argc, char const *argv[])
 		for (int i = 0; i < num_inodes; i++)
 			file_write.write((char*)&vec_inodes[i], sizeof(INODE));
 
-		file_write << (uint8_t)1; // root INODE id
+		file_write << (uint8_t)0; // root INODE id
 		/* write N empty blocks */
 		for (int i = size_block*num_blocks - 1; i >= 0; i--)
 		file_write << (uint8_t)0; 		
@@ -107,18 +107,21 @@ int main(int argc, char const *argv[])
 		/* free alocated memory */
 		delete[] bit_map;
 		delete[] vec_inodes;
-//		printSha256(file_sys.c_str());
+	//	printSha256(file_sys.c_str());
 	}	
-	else if(!command.compare("add"))
+	else if(!command.compare("addFile") ||  !command.compare("addDir"))
 	{
 		string parse, content;
-		ss >> parse >> content;
+		ss >> parse;
+		if(!command.compare("addFile"))
+			ss >> content;
 		/* divides file path into directiores and file */
 		vector<string> file_path = split(parse.c_str(), "/");
 		/*loads parent directiorie name or root */
 		string dir = (file_path.size() > 1) ? file_path.rbegin()[1]  : "/";
 
-
+		if(!command.compare("addFile"))
+        content.erase(content.size() - 1);
 		/* Read and load into variavles number and size of blocks, and number of inodes */
 		uint8_t* buffer = new uint8_t[3];
 		fstream file;
@@ -129,14 +132,13 @@ int main(int argc, char const *argv[])
 		T = buffer[0];
 		N = buffer[1];
 		I = buffer[2];
-		delete[] buffer;
+	//	delete[] buffer;
 
 		int bit_map_size = ceil((float)N/8);
 		uint8_t *bit_map = new uint8_t(bit_map_size);	
 		file.read((char*)bit_map, bit_map_size);
 
-		int blocks_needed = ceil((float)content.size()/2);
-
+		int blocks_needed = (!command.compare("addDir")) ? 1 : ceil((float)content.size()/T);
 		/*
 		 * ESTA PORTE DO CÓDIGO PODE SER REFATORADA !! 
 		 */
@@ -161,6 +163,7 @@ int main(int argc, char const *argv[])
 			parent_dir = (INODE*)buffer;
 			compare = (parent_dir->IS_USED && parent_dir->IS_DIR) ? parent_dir->NAME : "";
 			counter--;
+			//delete buffer;
 		}while(counter > 0 && strcmp(compare.c_str(), dir.c_str()));
 
 		if(counter <= 0 )
@@ -184,7 +187,7 @@ int main(int argc, char const *argv[])
 				file_inode_index = i;
 				break;
 			}
-			delete[] buffer;
+			// delete[] buffer;
 		}
 		if(file_inode_index == -1)
 			return -3;
@@ -211,18 +214,18 @@ int main(int argc, char const *argv[])
 		else
 			parent_dir_block = parent_dir->DIRECT_BLOCKS[parent_dir->SIZE/3];
 		/* sabe changes to block */
-		file.seekp((parent_dir_block-N)*T + 1,ios_base::end);
+		file.seekp((parent_dir_block-N)*T,ios_base::end);
 		for (int i = 0; i < T; ++i)
 		{
 			buffer = new uint8_t();
 			file.read((char*)buffer,1);
 			if(*buffer == 0)
-			{
+			{	
 				file.seekp(-1, ios_base::cur);
 				file << (uint8_t)file_inode_index;
 				break;
 			}
-			file.seekp(-2, ios_base::cur);
+			//	file.seekp(-2, ios_base::cur);
 		}
 
 		/* incresaes directorie size */ 
@@ -230,30 +233,68 @@ int main(int argc, char const *argv[])
 		file.seekp(parent_dir_pos);
 		file.write((char*)parent_dir, sizeof(INODE));
 
-		/* load inode for file into system */
-		INODE *file_inode = new INODE();
-		*file_inode = INIT_ROOT;
-		file_inode->IS_DIR = 0;
 
-		for (int i = 0; i < 10; ++i)
-		 	file_inode->NAME[i]  = ( i < file_path.rbegin()[0].size()) ? file_inode->NAME[i] = file_path.rbegin()[0][i] : 0; 
-		
-		file_inode->SIZE = blocks_needed;
-		for (int i = 0; i < blocks_needed; ++i)
-			file_inode->DIRECT_BLOCKS[i] = avaible_blocks_file[i];
+		if(!command.compare("addFile"))
+		{	
 
-		file.seekp(file_inode_pos);
-		file.write((char*)file_inode, sizeof(INODE));
+			/* load inode for file into system */
+			INODE *file_inode = new INODE();
+			*file_inode = INIT_ROOT;
+			file_inode->IS_DIR = 0;
 
+			for (int i = 0; i < 10; ++i)
+			 	file_inode->NAME[i]  = ( i < file_path.rbegin()[0].size()-1) ? file_inode->NAME[i] = file_path.rbegin()[0][i] : 0; 
 
+			file_inode->SIZE = content.size();
+			for (int i = 0; i < blocks_needed; ++i)
+				file_inode->DIRECT_BLOCKS[i] = avaible_blocks_file[i];
 
+			file.seekp(file_inode_pos);
+			file.write((char*)file_inode, sizeof(INODE));
+	        int string_size = content.size();
+			for (int i = blocks_needed-1; i >= 0; --i)
+			{
+				file.seekp((avaible_blocks_file[i]-N)*T + 1 ,ios_base::end);
+				for (int i = 0; i < T; ++i)
+				{
+					if(!content.empty())
+					{
+						char tmp = content[string_size--];
+						file << (uint8_t)tmp;
+						file.seekp(-2, ios_base::cur);
+					}
+				}
+			}
+		}
+		else
+		{
+						/* load inode for file into system */
+			INODE *dir_inode = new INODE();
+			*dir_inode = INIT_ROOT;
 
+			for (int i = 0; i < 10; ++i)
+			 	dir_inode->NAME[i]  = ( i < file_path.rbegin()[0].size()-1) ? dir_inode->NAME[i] = file_path.rbegin()[0][i] : 0; 
+
+			dir_inode->SIZE = 0;
+			for (int i = 0; i < blocks_needed; ++i)
+				dir_inode->DIRECT_BLOCKS[i] = avaible_blocks_file[i];
+
+			file.seekp(file_inode_pos);
+			file.write((char*)dir_inode, sizeof(INODE));
+	        
+		}	
+		file.seekp(3);
+		for (int i = 0 ; i < bit_map_size; i++)
+		file << bit_map[i];
+
+	//	delete[] bit_map;
 		/* to do
 		 * checar se existe espaço para mais um bloco
 		 * processar o path para determinar se é arquivo no root ou outro diretório
 		 * adicionar inode 
 		 */
 		file.close();
+	//	printSha256(file_sys.c_str());
 	}
 
 	
